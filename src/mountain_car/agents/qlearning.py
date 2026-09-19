@@ -57,7 +57,13 @@ class QLearningAgent:
         Tip: np.digitize(value, edges) returns the index of the bin a value
         falls into. Tip: the key must be hashable, so build a tuple of ints.
         """
-        raise NotImplementedError("EXERCISE 1a: implement discretize()")
+    
+        #raise NotImplementedError("EXERCISE 1a: implement discretize()")
+
+        return tuple( # Creation of a tuple of intigers, one for each dimension of the observation.
+            int(np.digitize(value, bins))
+            for value, bins in zip(obs, self._bins)
+        )
 
     def select_action(self, state: tuple, *, deterministic: bool = False) -> int:
         """EXERCISE 1b: epsilon-greedy action selection.
@@ -72,7 +78,17 @@ class QLearningAgent:
         Tip: self.q_table is a defaultdict, so indexing an unseen state is safe
         and returns a zero vector. Tip: np.argmax gives you the best action.
         """
-        raise NotImplementedError("EXERCISE 1b: implement select_action()")
+        #raise NotImplementedError("EXERCISE 1b: implement select_action()")
+
+        if deterministic: # If the deterministic flag is set to True, the agent will always exploit the best 
+            # action based on the Q-table for the given state.
+            return int(np.argmax(self.q_table[state]))
+
+        if np.random.random() < self.epsilon: # If a random number between 0 and 1 is less than the current 
+            # epsilon value, the agent will explore by selecting a random action from the available actions.
+            return int(np.random.randint(self.n_actions))
+
+        return int(np.argmax(self.q_table[state]))
 
     def predict(self, obs: np.ndarray, *, deterministic: bool = True) -> tuple[int, None]:
         return self.select_action(self.discretize(obs), deterministic=deterministic), None
@@ -100,7 +116,18 @@ class QLearningAgent:
         Note that `terminated` is NOT the same as "the episode ended" -- see
         the training loop below for why that distinction matters here.
         """
-        raise NotImplementedError("EXERCISE 1c: implement the Q-Learning update")
+        #raise NotImplementedError("EXERCISE 1c: implement the Q-Learning update")
+
+        if terminated: # If the episode has terminated, the target value for the Q-learning update
+            # is simply the immediate reward received from taking the action in the current state. There is no next state to consider for bootstrapping.
+            target = reward
+        else: # If the episode has not terminated, the target value for the Q-learning update is calculated 
+            # as the immediate reward plus the discounted maximum Q-value of the next state. This allows the agent to consider future rewards when updating its Q-values.
+            target = reward + self.gamma * np.max(self.q_table[next_state])
+
+        self.q_table[state][action] += self.lr * (
+            target - self.q_table[state][action]
+        )
 
     def train(self, total_episodes: int = 10_000, log_interval: int = 100) -> list[float]:
         env = gym.make(self.env_id)
