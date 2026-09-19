@@ -131,5 +131,9 @@ src/mountain_car/
     ├── qlearning.py    # tabular Q-Learning
     └── dqn.py          # DQN: QNetwork, ReplayBuffer, DQNAgent
 saves/                  # agent save files land here
+docs/
+├── Esquema_del_entrenamiento_de_Q-Learning.pdf
+└── Esquema_del_entrenamiento_de_DQN.pdf
+
 EXERCISES.md            # the exercises: what to implement, in what order
 ```
