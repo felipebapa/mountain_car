@@ -1,0 +1,25 @@
+{
+  "agente": "dqn",
+  "episodios_entrenamiento": 2500,
+  "semilla": 0,
+  "minutos_entrenamiento": 12.8,
+  "hiperparametros": {
+    "env_id": "MountainCar-v0",
+    "lr": 0.001,
+    "gamma": 0.99,
+    "epsilon_end": 0.01,
+    "epsilon_decay": 0.995,
+    "batch_size": 64,
+    "buffer_capacity": 100000,
+    "target_update_freq": 10,
+    "hidden": 128
+  },
+  "mejor_media_movil_entrenamiento": -101.15,
+  "media_ultimos_episodios_entrenamiento": -122.64,
+  "evaluacion_episodios": 100,
+  "evaluacion_media": -101.46,
+  "evaluacion_desviacion": 7.53,
+  "evaluacion_mejor": -84.0,
+  "evaluacion_peor": -115.0,
+  "evaluacion_llegadas_bandera": "100/100"
+}

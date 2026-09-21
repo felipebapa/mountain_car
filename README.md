@@ -1,4 +1,4 @@
-![CI](https://github.com/emiliomunozai/mountain_car/actions/workflows/ci.yml/badge.svg?branch=main)
+![CI](https://github.com/felipebapa/mountain_car/actions/workflows/ci.yml/badge.svg?branch=main)
 
 A hands-on repo for understanding how Reinforcement Learning works.
 Train, inspect, and visualise RL agents on [MountainCar-v0](https://gymnasium.farama.org/environments/classic_control/mountain_car/) (or any other Gymnasium environment).
@@ -6,6 +6,16 @@ Train, inspect, and visualise RL agents on [MountainCar-v0](https://gymnasium.fa
 **This repo is a set of exercises.** The CLI, training loops and persistence are
 written; the algorithms themselves are left as marked `EXERCISE` stubs for you
 to fill in. Start with **[EXERCISES.md](EXERCISES.md)**.
+
+## Team — Group 6
+
+- Valeria Sofía Guerrero Mejía
+- Felipe Barreto
+- Angie Paola Espinosa Hurtado
+- Luis Jorge García Camargo
+- Andrés Felipe Miranda Díaz
+- Luis Eduardo Uribe Álvarez
+- Juan Pablo Moreno Mendoza
 
 ## MountainCar-v0 environment
 
@@ -88,6 +98,24 @@ uv run mountaincar load qlearning --eval
 uv run mountaincar render qlearning --episodes 3
 ```
 
+### Reproducing our results
+
+`scripts/experimento.py` trains an agent, saves it to `saves/` (the same path the
+CLI uses), evaluates it on 100 greedy episodes (no exploration) and writes the
+training curve, the evaluation plot and a metrics summary to `results/<agent>/`:
+
+```bash
+uv run python scripts/experimento.py qlearning --episodes 20000   # ~2 min
+uv run python scripts/experimento.py dqn --episodes 2500         # ~13 min on CPU
+```
+
+Both runs use a fixed seed (`--seed 0` by default). Afterwards the CLI works on the
+trained agents, e.g. `uv run mountaincar load dqn --eval` or
+`uv run mountaincar render dqn --episodes 3`.
+
+The notebooks in `notebooks/` hold our first hyperparameter experiments; run them
+from the repository root inside the `uv sync` environment.
+
 ## Agents
 
 Both agents live in `src/mountain_car/agents/` and are written from scratch
@@ -122,6 +150,83 @@ of progressive clues, so it is a guided investigation rather than a wall.
 > this would most likely be *slower*, because per-kernel launch overhead would
 > dominate work this small.
 
+## What we implemented
+
+### Q-Learning — [`qlearning.py`](src/mountain_car/agents/qlearning.py)
+
+- **`discretize`**: each dimension is split into 20 bins with `np.digitize`, so a
+  state is one cell of a 20×20 grid, used as a tuple key into the Q-table.
+- **`select_action`**: epsilon-greedy; with `deterministic=True` it never explores.
+- **`_update`**: the TD update
+
+  ```
+  target  = r + gamma * max_a' Q(s', a')     (just r if the episode terminated at the flag)
+  Q(s, a) += lr * (target - Q(s, a))
+  ```
+
+### DQN — [`dqn.py`](src/mountain_car/agents/dqn.py)
+
+- **`QNetwork`**: MLP `2 → 128 → 128 → 3`, ReLU on the hidden layers, no output activation.
+- **`_learn`**: samples a mini-batch of 64 transitions from the replay buffer and
+  minimises the MSE against the Bellman target computed with the frozen target network
+  (synced every 10 episodes):
+
+  ```
+  target = r + gamma * max_a' Q_target(s', a') * (1 - terminated)
+  loss   = MSE(Q(s, a), target)
+  ```
+
+- **`select_action`**: exploration is temporally correlated: when exploring, the agent
+  repeats its previous action with probability 0.9, so it can produce the sustained
+  pushes needed to rock out of the valley. Evaluation stays purely greedy.
+
+## Training schemes
+
+- [Q-Learning training scheme (PDF)](docs/Esquema_del_entrenamiento_de_Q-Learning.pdf)
+- [DQN training scheme (PDF)](docs/Esquema_del_entrenamiento_de_DQN.pdf)
+
+## Results
+
+Evaluation metrics are over **100 greedy episodes** (no exploration) with the final
+agent of each run. Full numbers are in `results/<agent>/resumen.json`.
+
+| Agent | Training episodes | Training time | Best moving average (training) | Evaluation mean ± std | Reached the flag |
+|---|---:|---:|---:|---:|---:|
+| Q-Learning | 20,000 | 2 min | **−132.2** (window 200) | −162.0 ± 20.6 | **100/100** |
+| DQN | 2,500 | 13 min | **−101.2** (window 100) | **−101.5 ± 7.5** | **100/100** |
+
+### Q-Learning
+
+![Q-Learning training curve](results/qlearning/curva_entrenamiento.png)
+
+![Q-Learning evaluation](results/qlearning/evaluacion.png)
+
+**Comment.** For the first ~1,800 episodes the reward is stuck at −200: the agent has
+never reached the flag, so there is nothing to propagate. Once it does, that information
+flows backwards through the Q-table and the moving average climbs to its best value of
+**−132.2** (episode 9,549). After that it oscillates between −135 and −170: with only 400
+cells, different states share a cell and the policy cannot get any finer. In the final
+evaluation it reaches the flag in **100/100 episodes** with a mean of **−162** (range −138
+to −189). It solves the task consistently, although it does not reach the −110 threshold.
+
+### DQN
+
+![DQN training curve](results/dqn/curva_entrenamiento.png)
+
+![DQN evaluation](results/dqn/evaluacion.png)
+
+**Comment.** For the first ~350 episodes DQN is also stuck at −200. The correlated
+exploration then starts producing the first successes, and between episodes 850 and
+1,000 the moving average jumps from about −195 to −140 as the network generalises what
+it learned to nearby states. The best moving average, **−101.2**, is reached at episode
+1,511. After that the training curve oscillates between about −108 and −140. That is expected:
+during training the agent still explores (ε never goes below 0.01, and each exploratory
+action is repeated with probability 0.9), and the network keeps changing as the buffer
+fills with new data. With exploration switched off, the final agent reaches the flag in
+**100/100 episodes** with a mean of **−101.5** (range −84 to −115). That clears the
+"solved" threshold of −110 and beats tabular Q-Learning by about 60 steps per episode,
+because the network works on the continuous state instead of a 20×20 grid.
+
 ## Project layout
 
 ```
@@ -130,7 +235,14 @@ src/mountain_car/
 └── agents/
     ├── qlearning.py    # tabular Q-Learning
     └── dqn.py          # DQN: QNetwork, ReplayBuffer, DQNAgent
-saves/                  # agent save files land here
+scripts/
+└── experimento.py      # train + evaluate + plots and summary
+notebooks/              # first hyperparameter experiments
+results/
+├── qlearning/          # evidence of the best Q-Learning result
+├── dqn/                # evidence of the best DQN result
+└── primeros_intentos/  # plots and models from our first attempts
+saves/                  # agent save files land here (not committed)
 docs/
 ├── Esquema_del_entrenamiento_de_Q-Learning.pdf
 └── Esquema_del_entrenamiento_de_DQN.pdf
