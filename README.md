@@ -137,3 +137,102 @@ docs/
 
 EXERCISES.md            # the exercises: what to implement, in what order
 ```
+
+---
+
+# Entrega — Maestría en Inteligencia Artificial
+
+**Universidad de La Sabana** · Simulación y Aprendizaje por Refuerzo
+
+| Agente | Responsables |
+|---|---|
+| Q-Learning tabular (Ejercicio 1) + esquema | Equipo |
+| DQN (Ejercicios 2 y 3) + esquema | Juan Pablo · Andrés Felipe Miranda Díaz |
+
+## Qué se implementó
+
+Los tres bloques marcados como `EXERCISE` en el repositorio original:
+
+| | Archivo | Qué se escribió |
+|---|---|---|
+| 1 | `agents/qlearning.py` | Discretización del estado, política epsilon-greedy y actualización TD de la tabla Q |
+| 2a | `agents/dqn.py` | `QNetwork`: red 2 → 128 → 128 → 3, ReLU en las capas ocultas y sin activación en la salida (17.283 parámetros) |
+| 2b | `agents/dqn.py` | `_learn()`: lote de 64, `gather` sobre las acciones tomadas, máximo de la red objetivo sin gradiente, objetivo de Bellman y paso de descenso |
+| 3 | `agents/dqn.py` | `select_action()`: corrección de la exploración |
+
+## El problema del Ejercicio 3 y cómo se resolvió
+
+Con los Ejercicios 2a y 2b correctos, DQN entrena sin errores y **no aprende nada**: reporta −200,00 durante 1000 episodios, sin la menor variación.
+
+El diagnóstico se hizo con cuatro mediciones:
+
+**1. El código de aprendizaje no era el problema.** El mismo agente, sin modificar, entrenado 200 episodios en `CartPole-v1` pasó de 21,12 a 284,28. La red, la actualización y el buffer funcionan; el fallo era específico de MountainCar.
+
+**2. El agente nunca había visto la meta.** Sobre 300 episodios con acciones al azar: **0 llegadas a la bandera**, las 300 cortadas por el límite de 200 pasos. La posición máxima promedio fue −0,389 y la mejor de las 300 fue −0,163, frente a una meta en 0,5. El carro no salió del valle ni una vez.
+
+**3. La red había aprendido que daba igual qué hacer.** En 200 estados al azar, la diferencia media entre los valores de las tres acciones era 0,0058 — prácticamente cero — y el valor medio se acercaba a −100, que es la suma descontada de −1 para siempre. Con los datos que vio, la red tenía razón.
+
+**4. El comportamiento necesario era inalcanzable, no improbable.** Salir del valle exige unos 20 empujones seguidos en la misma dirección. Sorteando una acción nueva en cada paso entre tres opciones, eso tiene probabilidad (1/3)^20 ≈ 3 · 10⁻¹⁰. Más episodios no lo arreglan.
+
+**La corrección.** El problema no está en la fórmula de aprendizaje sino en los datos que se recogen: sorteando en cada paso, las acciones consecutivas son independientes y se cancelan entre sí. La solución es hacerlas dependientes en el tiempo — cuando el agente decide explorar, **mantiene esa acción durante 25 pasos** en lugar de uno. Con eso las llegadas a la meta pasan de 0/300 a 46/300. No se modificó ni la regla de actualización, ni la recompensa, ni el entorno.
+
+## Resultados
+
+Evaluación sobre **100 episodios** con política voraz (sin exploración):
+
+| Agente | Recompensa media | Mejor episodio | Llega a la meta |
+|---|---|---|---|
+| Q-Learning tabular | −132,54 ± 19,21 | −114 | 100/100 |
+| **DQN** | **−107,70 ± 14,06** | **−88** | **100/100** |
+
+### Q-Learning tabular
+
+![Resultado de Q-Learning](docs/evidencia/qlearning_resultado.png)
+
+Necesita 20.000 episodios. Se mantiene en el piso de −200 durante los primeros 2.000 —hasta que el azar da con la bandera por primera vez— y a partir de ahí sube. La curva no se estabiliza: oscila entre −140 y −175 hasta el final, porque la discretización en una malla de 20×20 agrupa estados distintos en la misma celda y la política no llega a afinarse más. Resuelve el entorno en los 100 episodios de evaluación, pero no cruza el umbral de −110.
+
+### DQN
+
+![Resultado de DQN](docs/evidencia/dqn_resultado.png)
+
+Alcanza un resultado mejor con **8 veces menos episodios**: 2.500 frente a 20.000. Arranca plano en −195 mientras la exploración es casi total, despega hacia el episodio 600 cuando ya hay llegadas a la meta en la memoria, y se estabiliza alrededor de −130.
+
+Obsérvese que la curva de entrenamiento se queda en −130 mientras la evaluación da −107,70. La diferencia es la exploración: durante el entrenamiento, las rachas de 25 pasos arruinan el episodio en curso. En evaluación no hay exploración, y ahí se ve lo que la red realmente aprendió.
+
+La ventaja sobre la tabla viene de no discretizar: la red recibe la posición y la velocidad como números continuos y generaliza entre estados parecidos, en vez de tratar cada celda de la malla por separado.
+
+### Sobre la elección de los 25 pasos
+
+Se probaron 20, 25 y 30 con **3 entrenamientos independientes cada uno** (100 episodios de evaluación por entrenamiento):
+
+| Pasos | Media de las 3 corridas | Desviación entre corridas |
+|---|---|---|
+| 20 | −113,61 | 13,79 |
+| 25 | −103,69 | 4,06 |
+| 30 | −104,58 | 2,41 |
+
+Las nueve corridas resolvieron el entorno en 100/100 episodios. **25 y 30 son indistinguibles entre sí**; 20 alcanza medias parecidas pero es mucho más inestable —una de sus tres corridas cayó a −132,65—. Se adoptó 25 por estabilidad, no por tener la mejor media.
+
+Un solo entrenamiento por configuración no habría permitido distinguir nada: la variación entre corridas del mismo valor es mayor que la diferencia entre valores distintos.
+
+## Cómo reproducirlo
+
+```bash
+uv sync                           # si falla: uv python install 3.11
+uv run mountaincar inspect        # ver el entorno
+
+# Q-Learning (unos 4 minutos)
+uv run mountaincar train qlearning --episodes 20000
+uv run mountaincar load qlearning --eval
+
+# DQN (unos 20 minutos)
+uv run mountaincar train dqn --episodes 2500
+uv run mountaincar load dqn --eval
+
+# ver al agente conducir
+uv run mountaincar render dqn --episodes 3
+```
+
+Los agentes entrenados se guardan en `saves/`, que está en `.gitignore`: hay que entrenarlos localmente.
+
+Todo corre en CPU. Se midió que la GPU es más lenta para esta carga (0,78 ms por paso de gradiente frente a 0,55 ms): la red es tan pequeña que el coste de lanzar cada kernel pesa más que el cálculo, y el cuello de botella real es avanzar la simulación del entorno.
