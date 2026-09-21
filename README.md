@@ -107,6 +107,7 @@ training curve, the evaluation plot and a metrics summary to `results/<agent>/`:
 ```bash
 uv run python scripts/experimento.py qlearning --episodes 20000   # ~2 min
 uv run python scripts/experimento.py dqn --episodes 2500         # ~13 min on CPU
+uv run python scripts/comparacion.py                              # Q-Learning vs DQN plot
 ```
 
 Both runs use a fixed seed (`--seed 0` by default). Afterwards the CLI works on the
@@ -227,6 +228,33 @@ fills with new data. With exploration switched off, the final agent reaches the 
 "solved" threshold of −110 and beats tabular Q-Learning by about 60 steps per episode,
 because the network works on the continuous state instead of a 20×20 grid.
 
+### Q-Learning vs DQN
+
+![Q-Learning vs DQN](results/comparacion.png)
+
+| | Q-Learning | DQN |
+|---|---:|---:|
+| Evaluation mean (100 greedy episodes) | −162.0 | **−101.5** |
+| Standard deviation | ±20.6 | **±7.5** |
+| Best / worst evaluation episode | −138 / −189 | **−84 / −115** |
+| Reached the flag | 100/100 | 100/100 |
+| Reaches the −110 "solved" threshold | No | **Yes** |
+| Training episodes | 20,000 | **2,500** |
+| Training time (CPU) | **2 min** | 13 min |
+
+- **Performance:** DQN needs about **60 fewer steps per episode** to reach the flag and
+  clears the −110 threshold; Q-Learning does not.
+- **Stability:** DQN's evaluation spread is almost 3 times smaller. Its worst episode (−115)
+  is better than Q-Learning's best one (−138).
+- **Sample efficiency:** DQN learns with **8 times fewer episodes**. It starts improving
+  around episode 850, while Q-Learning needs about 2,000 episodes just to leave −200.
+- **Cost:** each DQN episode is much more expensive (a gradient step per environment
+  step), so in wall-clock time Q-Learning is about 6 times faster.
+- **Why:** the Q-table only sees 400 cells, so states that need different actions share
+  a cell and the policy cannot get finer. The DQN network works on the continuous
+  (position, velocity) and generalises between nearby states, so every success also
+  improves the estimates of states it has not visited exactly.
+
 ## Project layout
 
 ```
@@ -236,11 +264,13 @@ src/mountain_car/
     ├── qlearning.py    # tabular Q-Learning
     └── dqn.py          # DQN: QNetwork, ReplayBuffer, DQNAgent
 scripts/
-└── experimento.py      # train + evaluate + plots and summary
+├── experimento.py      # train + evaluate + plots and summary
+└── comparacion.py      # Q-Learning vs DQN comparison plot
 notebooks/              # first hyperparameter experiments
 results/
 ├── qlearning/          # evidence of the best Q-Learning result
 ├── dqn/                # evidence of the best DQN result
+├── comparacion.png     # Q-Learning vs DQN
 └── primeros_intentos/  # plots and models from our first attempts
 saves/                  # agent save files land here (not committed)
 docs/
