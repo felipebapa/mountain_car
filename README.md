@@ -203,7 +203,7 @@ La ventaja sobre la tabla viene de no discretizar. La red recibe la posición y 
 
 ### Sobre la elección de los 25 pasos
 
-Se probaron 20, 25 y 30 con 3 entrenamientos independientes cada uno y 100 episodios de evaluación por entrenamiento:
+Se probaron 20, 25 y 30 con 3 entrenamientos independientes cada uno y 100 episodios de evaluación por entrenamiento. Las cifras de esta tabla promedian esas tres corridas, mientras que el −107,70 de la tabla anterior corresponde al entrenamiento concreto que se entrega:
 
 | Pasos | Media de las 3 corridas | Desviación entre corridas |
 |---|---|---|

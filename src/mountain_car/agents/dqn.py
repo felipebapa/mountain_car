@@ -23,19 +23,11 @@ from torch import nn, optim
 
 
 class QNetwork(nn.Module):
-    """EXERCISE 2a: the network that maps a state to one Q-value per action.
+    """Maps a state to one Q-value per action.
 
-    Build a small fully-connected net:
-
-        state_dim -> hidden -> hidden -> action_dim
-
-    with a ReLU after each hidden layer. There is NO activation on the output
-    layer: these are Q-values (here they are all negative), not probabilities.
-
-    Tip: nn.Sequential(nn.Linear(...), nn.ReLU(), ...) is the shortest route.
-    Tip: remember super().__init__() before assigning any submodule.
-    Tip: forward() receives a batch of shape (B, state_dim) and must return
-         shape (B, action_dim).
+    A fully-connected net, state_dim -> hidden -> hidden -> action_dim, with a
+    ReLU after each hidden layer. forward() takes a batch of shape
+    (B, state_dim) and returns (B, action_dim).
     """
 
     def __init__(self, state_dim: int, action_dim: int, hidden: int = 128) -> None:
