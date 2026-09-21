@@ -147,7 +147,7 @@ EXERCISES.md            # the exercises: what to implement, in what order
 | Agente | Responsables |
 |---|---|
 | Q-Learning tabular (Ejercicio 1) + esquema | Equipo |
-| DQN (Ejercicios 2 y 3) + esquema | Juan Pablo · Andrés Felipe Miranda Díaz |
+| DQN (Ejercicios 2 y 3) + esquema | Juan Pablo Moreno Mendoza · Andrés Felipe Miranda Díaz |
 
 ## Qué se implementó
 
