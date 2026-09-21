@@ -177,9 +177,10 @@ of progressive clues, so it is a guided investigation rather than a wall.
   loss   = MSE(Q(s, a), target)
   ```
 
-- **`select_action`**: exploration is temporally correlated: when exploring, the agent
-  repeats its previous action with probability 0.9, so it can produce the sustained
-  pushes needed to rock out of the valley. Evaluation stays purely greedy.
+- **`select_action`**: exploration is temporally correlated. When the agent decides to
+  explore, it commits to that action for 25 steps instead of drawing a new one every
+  step, which is what produces the sustained pushes needed to rock out of the valley.
+  `deterministic=True` stays purely greedy, so evaluation never explores.
 
 ## Training schemes
 
@@ -188,72 +189,95 @@ of progressive clues, so it is a guided investigation rather than a wall.
 
 ## Results
 
-Evaluation metrics are over **100 greedy episodes** (no exploration) with the final
-agent of each run. Full numbers are in `results/<agent>/resumen.json`.
+Evaluation is over **100 greedy episodes** (no exploration) with the final agent of
+each run.
 
-| Agent | Training episodes | Training time | Best moving average (training) | Evaluation mean ± std | Reached the flag |
-|---|---:|---:|---:|---:|---:|
-| Q-Learning | 20,000 | 2 min | **−132.2** (window 200) | −162.0 ± 20.6 | **100/100** |
-| DQN | 2,500 | 13 min | **−101.2** (window 100) | **−101.5 ± 7.5** | **100/100** |
+| Agent | Training episodes | Evaluation mean ± std | Best / worst episode | Reached the flag |
+|---|---:|---:|---:|---:|
+| Q-Learning | 20,000 | −132.54 ± 19.21 | −114 / −167 | 100/100 |
+| DQN | 2,500 | **−107.70 ± 14.06** | **−88** / −142 | 100/100 |
 
 ### Q-Learning
 
-![Q-Learning training curve](results/qlearning/curva_entrenamiento.png)
+![Q-Learning result](docs/evidencia/qlearning_resultado.png)
 
-![Q-Learning evaluation](results/qlearning/evaluacion.png)
-
-**Comment.** For the first ~1,800 episodes the reward is stuck at −200: the agent has
-never reached the flag, so there is nothing to propagate. Once it does, that information
-flows backwards through the Q-table and the moving average climbs to its best value of
-**−132.2** (episode 9,549). After that it oscillates between −135 and −170: with only 400
-cells, different states share a cell and the policy cannot get any finer. In the final
-evaluation it reaches the flag in **100/100 episodes** with a mean of **−162** (range −138
-to −189). It solves the task consistently, although it does not reach the −110 threshold.
+**Comment.** For the first ~2,000 episodes the reward sits at −200: the agent has never
+reached the flag, so there is nothing to propagate. Once it does, that information flows
+backwards through the Q-table and the curve climbs. It then oscillates between −140 and
+−175 for the rest of the run: with only 400 cells, different states share a cell and the
+policy cannot get any finer. In evaluation it reaches the flag in **100/100 episodes**
+with a mean of **−132.54**, short of the −110 threshold.
 
 ### DQN
 
-![DQN training curve](results/dqn/curva_entrenamiento.png)
+![DQN result](docs/evidencia/dqn_resultado.png)
 
-![DQN evaluation](results/dqn/evaluacion.png)
+**Comment.** DQN is flat at −195 while exploration dominates, lifts off around episode
+600 once the replay buffer holds successful episodes, and settles near −130. With
+exploration switched off it reaches the flag in **100/100 episodes** with a mean of
+**−107.70**, clearing the −110 threshold with **8 times fewer episodes** than the table.
 
-**Comment.** For the first ~350 episodes DQN is also stuck at −200. The correlated
-exploration then starts producing the first successes, and between episodes 850 and
-1,000 the moving average jumps from about −195 to −140 as the network generalises what
-it learned to nearby states. The best moving average, **−101.2**, is reached at episode
-1,511. After that the training curve oscillates between about −108 and −140. That is expected:
-during training the agent still explores (ε never goes below 0.01, and each exploratory
-action is repeated with probability 0.9), and the network keeps changing as the buffer
-fills with new data. With exploration switched off, the final agent reaches the flag in
-**100/100 episodes** with a mean of **−101.5** (range −84 to −115). That clears the
-"solved" threshold of −110 and beats tabular Q-Learning by about 60 steps per episode,
-because the network works on the continuous state instead of a 20×20 grid.
+The training curve stays at −130 while evaluation gives −107.70. The gap is exploration:
+during training the 25-step runs spoil the episode in progress, and evaluation has none.
+
+The advantage over the table comes from not discretising. The network takes position and
+velocity as continuous numbers and generalises between nearby states, while the table
+treats every grid cell separately.
 
 ### Q-Learning vs DQN
 
-![Q-Learning vs DQN](results/comparacion.png)
-
 | | Q-Learning | DQN |
 |---|---:|---:|
-| Evaluation mean (100 greedy episodes) | −162.0 | **−101.5** |
-| Standard deviation | ±20.6 | **±7.5** |
-| Best / worst evaluation episode | −138 / −189 | **−84 / −115** |
+| Evaluation mean (100 greedy episodes) | −132.54 | **−107.70** |
+| Standard deviation | ±19.21 | **±14.06** |
+| Best / worst evaluation episode | −114 / −167 | **−88 / −142** |
 | Reached the flag | 100/100 | 100/100 |
 | Reaches the −110 "solved" threshold | No | **Yes** |
 | Training episodes | 20,000 | **2,500** |
-| Training time (CPU) | **2 min** | 13 min |
 
-- **Performance:** DQN needs about **60 fewer steps per episode** to reach the flag and
-  clears the −110 threshold; Q-Learning does not.
-- **Stability:** DQN's evaluation spread is almost 3 times smaller. Its worst episode (−115)
-  is better than Q-Learning's best one (−138).
-- **Sample efficiency:** DQN learns with **8 times fewer episodes**. It starts improving
-  around episode 850, while Q-Learning needs about 2,000 episodes just to leave −200.
-- **Cost:** each DQN episode is much more expensive (a gradient step per environment
-  step), so in wall-clock time Q-Learning is about 6 times faster.
-- **Why:** the Q-table only sees 400 cells, so states that need different actions share
-  a cell and the policy cannot get finer. The DQN network works on the continuous
-  (position, velocity) and generalises between nearby states, so every success also
-  improves the estimates of states it has not visited exactly.
+DQN needs about 25 fewer steps per episode and clears the threshold that the table does
+not, learning from 8 times fewer episodes. Each DQN episode costs more, though, because
+it runs a gradient step per environment step.
+
+## Exercise 3: why DQN would not learn
+
+With 2a and 2b correct, DQN trains without errors and learns nothing: −200.00 for 1,000
+episodes, with no variation. Four measurements located the cause.
+
+1. **The learning code was fine.** The same agent, unmodified, trained for 200 episodes
+   on `CartPole-v1` went from 21.12 to 284.28. The network, the update and the buffer
+   work, so the failure was specific to MountainCar.
+2. **The agent had never seen the goal.** Over 300 episodes of random actions there were
+   0 flag reaches; all 300 were cut by the 200-step limit. The average maximum position
+   was −0.389 and the best of the 300 was −0.163, with the goal at 0.5.
+3. **The network had learned that nothing it does matters.** Across 200 random states,
+   the mean spread between the three action values was 0.0058, and the mean value was
+   approaching −100, the discounted sum of −1 forever. Given the data it saw, that was
+   correct.
+4. **The required behaviour was unreachable.** Escaping the valley takes about 20
+   consecutive pushes in the same direction. Drawing a fresh action each step from three
+   options gives that a probability of (1/3)^20, so more episodes never help.
+
+The fix is in the data being collected. Drawing each step independently makes
+consecutive actions cancel out, so they have to be made dependent in time: when the
+agent explores, it holds that action for 25 steps. Flag reaches go from 0/300 to 46/300.
+The update rule, the reward and the environment were left untouched.
+
+### Choosing 25 steps
+
+Values 20, 25 and 30 were trained 3 independent times each, with 100 evaluation
+episodes per run:
+
+| Steps | Mean of the 3 runs | Std across runs |
+|---|---:|---:|
+| 20 | −113.61 | 13.79 |
+| 25 | −103.69 | 4.06 |
+| 30 | −104.58 | 2.41 |
+
+All nine runs solved the environment 100/100. Values 25 and 30 are indistinguishable,
+while 20 reaches similar means but is far less stable: one of its three runs dropped to
+−132.65. 25 was adopted for its stability. The figures above come from the run that is
+being delivered, which is why its mean differs from the sweep average.
 
 ## Project layout
 
@@ -267,110 +291,12 @@ scripts/
 ├── experimento.py      # train + evaluate + plots and summary
 └── comparacion.py      # Q-Learning vs DQN comparison plot
 notebooks/              # first hyperparameter experiments
-results/
-├── qlearning/          # evidence of the best Q-Learning result
-├── dqn/                # evidence of the best DQN result
-├── comparacion.png     # Q-Learning vs DQN
-└── primeros_intentos/  # plots and models from our first attempts
+results/                # raw per-episode rewards and run summaries
 saves/                  # agent save files land here (not committed)
 docs/
+├── evidencia/          # evidence of the best result of each agent
 ├── Esquema_del_entrenamiento_de_Q-Learning.pdf
 └── Esquema_del_entrenamiento_de_DQN.pdf
 
 EXERCISES.md            # the exercises: what to implement, in what order
 ```
-
----
-
-# Entrega: Maestría en Inteligencia Artificial
-
-Universidad de La Sabana. Simulación y Aprendizaje por Refuerzo.
-
-| Agente | Responsables |
-|---|---|
-| Q-Learning tabular (Ejercicio 1) + esquema | Equipo |
-| DQN (Ejercicios 2 y 3) + esquema | Juan Pablo Moreno Mendoza, Andrés Felipe Miranda Díaz |
-
-## Qué se implementó
-
-Los tres bloques marcados como `EXERCISE` en el repositorio original:
-
-| | Archivo | Qué se escribió |
-|---|---|---|
-| 1 | `agents/qlearning.py` | Discretización del estado, política epsilon-greedy y actualización TD de la tabla Q |
-| 2a | `agents/dqn.py` | `QNetwork`: red 2 → 128 → 128 → 3, ReLU en las capas ocultas y sin activación en la salida (17.283 parámetros) |
-| 2b | `agents/dqn.py` | `_learn()`: lote de 64, `gather` sobre las acciones tomadas, máximo de la red objetivo sin gradiente, objetivo de Bellman y paso de descenso |
-| 3 | `agents/dqn.py` | `select_action()`: corrección de la exploración |
-
-## El problema del Ejercicio 3 y cómo se resolvió
-
-Con los Ejercicios 2a y 2b correctos, DQN entrena sin errores y no aprende nada: reporta −200,00 durante 1000 episodios, sin variación.
-
-El diagnóstico se hizo con cuatro mediciones.
-
-1. El código de aprendizaje funcionaba. El mismo agente, sin modificar, entrenado 200 episodios en `CartPole-v1`, pasó de 21,12 a 284,28. La red, la actualización y el buffer estaban bien, así que el fallo era específico de MountainCar.
-
-2. El agente nunca había visto la meta. Sobre 300 episodios con acciones al azar hubo 0 llegadas a la bandera y las 300 se cortaron por el límite de 200 pasos. La posición máxima promedio fue −0,389 y la mejor de las 300 fue −0,163, con la meta en 0,5. El carro no salió del valle en ninguno.
-
-3. La red había aprendido que daba igual qué hacer. En 200 estados al azar, la diferencia media entre los valores de las tres acciones era 0,0058, prácticamente cero, y el valor medio se acercaba a −100, que es la suma descontada de −1 para siempre. Con los datos que vio, esa conclusión era correcta.
-
-4. El comportamiento necesario era inalcanzable. Salir del valle exige unos 20 empujones seguidos en la misma dirección. Sorteando una acción nueva en cada paso entre tres opciones, eso tiene probabilidad (1/3)^20 ≈ 3 · 10⁻¹⁰, así que entrenar más episodios no cambia nada.
-
-La corrección está en los datos que se recogen. Sorteando en cada paso, las acciones consecutivas son independientes y se cancelan entre sí, de modo que hay que hacerlas dependientes en el tiempo. Cuando el agente decide explorar, mantiene esa acción durante 25 pasos en lugar de uno. Con eso las llegadas a la meta pasan de 0/300 a 46/300. No se modificó la regla de actualización, la recompensa ni el entorno.
-
-## Resultados
-
-Evaluación sobre 100 episodios con política voraz, sin exploración:
-
-| Agente | Recompensa media | Mejor episodio | Llega a la meta |
-|---|---|---|---|
-| Q-Learning tabular | −132,54 ± 19,21 | −114 | 100/100 |
-| DQN | −107,70 ± 14,06 | −88 | 100/100 |
-
-### Q-Learning tabular
-
-![Resultado de Q-Learning](docs/evidencia/qlearning_resultado.png)
-
-Necesita 20.000 episodios. Se mantiene en el piso de −200 durante los primeros 2.000, hasta que el azar da con la bandera por primera vez, y a partir de ahí sube. La curva no se estabiliza: oscila entre −140 y −175 hasta el final, porque la discretización en una malla de 20×20 agrupa estados distintos en la misma celda y la política no llega a afinarse más. Resuelve el entorno en los 100 episodios de evaluación, sin alcanzar el umbral de −110.
-
-### DQN
-
-![Resultado de DQN](docs/evidencia/dqn_resultado.png)
-
-Llega a un resultado mejor con 8 veces menos episodios: 2.500 frente a 20.000. Arranca plano en −195 mientras la exploración es casi total, despega hacia el episodio 600 cuando ya hay llegadas a la meta en la memoria, y se estabiliza alrededor de −130.
-
-La curva de entrenamiento se queda en −130 mientras la evaluación da −107,70. La diferencia es la exploración: durante el entrenamiento las rachas de 25 pasos arruinan el episodio en curso, y en la evaluación no hay exploración.
-
-La ventaja sobre la tabla viene de no discretizar. La red recibe la posición y la velocidad como números continuos y generaliza entre estados parecidos, mientras que la tabla trata cada celda de la malla por separado.
-
-### Sobre la elección de los 25 pasos
-
-Se probaron 20, 25 y 30 con 3 entrenamientos independientes cada uno y 100 episodios de evaluación por entrenamiento. Las cifras de esta tabla promedian esas tres corridas, mientras que el −107,70 de la tabla anterior corresponde al entrenamiento concreto que se entrega:
-
-| Pasos | Media de las 3 corridas | Desviación entre corridas |
-|---|---|---|
-| 20 | −113,61 | 13,79 |
-| 25 | −103,69 | 4,06 |
-| 30 | −104,58 | 2,41 |
-
-Las nueve corridas resolvieron el entorno en 100/100 episodios. Los valores 25 y 30 dan resultados indistinguibles entre sí. El 20 alcanza medias parecidas pero es mucho más inestable: una de sus tres corridas cayó a −132,65. Se adoptó 25 por su estabilidad.
-
-## Cómo reproducirlo
-
-```bash
-uv sync                           # si falla: uv python install 3.11
-uv run mountaincar inspect        # ver el entorno
-
-# Q-Learning (unos 4 minutos)
-uv run mountaincar train qlearning --episodes 20000
-uv run mountaincar load qlearning --eval
-
-# DQN (unos 20 minutos)
-uv run mountaincar train dqn --episodes 2500
-uv run mountaincar load dqn --eval
-
-# ver al agente conducir
-uv run mountaincar render dqn --episodes 3
-```
-
-Los agentes entrenados se guardan en `saves/`, que está en `.gitignore`, así que hay que entrenarlos localmente.
