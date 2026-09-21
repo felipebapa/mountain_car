@@ -213,8 +213,6 @@ Se probaron 20, 25 y 30 con 3 entrenamientos independientes cada uno y 100 episo
 
 Las nueve corridas resolvieron el entorno en 100/100 episodios. Los valores 25 y 30 dan resultados indistinguibles entre sí. El 20 alcanza medias parecidas pero es mucho más inestable: una de sus tres corridas cayó a −132,65. Se adoptó 25 por su estabilidad.
 
-Un solo entrenamiento por configuración no habría permitido distinguir nada, porque la variación entre corridas del mismo valor es mayor que la diferencia entre valores distintos.
-
 ## Cómo reproducirlo
 
 ```bash
@@ -234,5 +232,3 @@ uv run mountaincar render dqn --episodes 3
 ```
 
 Los agentes entrenados se guardan en `saves/`, que está en `.gitignore`, así que hay que entrenarlos localmente.
-
-Todo corre en CPU. Se midió que la GPU es más lenta para esta carga, 0,78 ms por paso de gradiente frente a 0,55 ms: la red es tan pequeña que el coste de lanzar cada kernel pesa más que el cálculo, y el cuello de botella real es avanzar la simulación del entorno.
