@@ -9,13 +9,13 @@ to fill in. Start with **[EXERCISES.md](EXERCISES.md)**.
 
 ## Team — Group 6
 
-- Valeria Sofía Guerrero Mejía
 - Felipe Barreto
 - Angie Paola Espinosa Hurtado
 - Luis Jorge García Camargo
+- Valeria Sofía Guerrero Mejía
 - Andrés Felipe Miranda Díaz
-- Luis Eduardo Uribe Álvarez
 - Juan Pablo Moreno Mendoza
+- Luis Eduardo Uribe Álvarez
 
 ## MountainCar-v0 environment
 
