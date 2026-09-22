@@ -23,24 +23,17 @@ from torch import nn, optim
 
 
 class QNetwork(nn.Module):
-    """EXERCISE 2a: the network that maps a state to one Q-value per action.
+    """Maps a state to one Q-value per action.
 
-    Build a small fully-connected net:
-
-        state_dim -> hidden -> hidden -> action_dim
-
-    with a ReLU after each hidden layer. There is NO activation on the output
-    layer: these are Q-values (here they are all negative), not probabilities.
-
-    Tip: nn.Sequential(nn.Linear(...), nn.ReLU(), ...) is the shortest route.
-    Tip: remember super().__init__() before assigning any submodule.
-    Tip: forward() receives a batch of shape (B, state_dim) and must return
-         shape (B, action_dim).
+    A fully-connected net, state_dim -> hidden -> hidden -> action_dim, with a
+    ReLU after each hidden layer. forward() takes a batch of shape
+    (B, state_dim) and returns (B, action_dim).
     """
 
     def __init__(self, state_dim: int, action_dim: int, hidden: int = 128) -> None:
         super().__init__()
-        self.network = nn.Sequential(
+        # No activation on the output: these are Q-values, not probabilities.
+        self.net = nn.Sequential(
             nn.Linear(state_dim, hidden),
             nn.ReLU(),
             nn.Linear(hidden, hidden),
@@ -49,7 +42,7 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.network(x)
+        return self.net(x)
 
 
 # ── Replay buffer ────────────────────────────────────────────────────
@@ -102,6 +95,7 @@ class DQNAgent:
         buffer_capacity: int = 100_000,
         target_update_freq: int = 10,
         hidden: int = 128,
+        explore_repeat: int = 25,
     ) -> None:
         self.env_id = env_id
         self.lr = lr
@@ -113,7 +107,12 @@ class DQNAgent:
         self.buffer_capacity = buffer_capacity
         self.target_update_freq = target_update_freq
         self.hidden = hidden
+        self.explore_repeat = explore_repeat
         self.training_episodes = 0
+
+        # Exploration run state, reset each episode in train().
+        self._explore_action = 0
+        self._explore_steps_left = 0
 
         env = gym.make(env_id)
         self.state_dim = int(env.observation_space.shape[0])  # type: ignore[index]
@@ -121,7 +120,6 @@ class DQNAgent:
         env.close()
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.last_action: int | None = None
 
         self.q_net = QNetwork(self.state_dim, self.action_dim, hidden).to(self.device)
         self.target_net = QNetwork(self.state_dim, self.action_dim, hidden).to(self.device)
@@ -133,21 +131,37 @@ class DQNAgent:
 
     # ── policy ────────────────────────────────────────────────────────
 
-    def select_action(self, state: np.ndarray, *, deterministic: bool = False) -> int:
-        """Explore with temporally correlated actions so the car can build momentum."""
-        if not deterministic and random.random() < self.epsilon:
-            if self.last_action is not None and random.random() < 0.9:
-                action = self.last_action
-            else:
-                action = random.randrange(self.action_dim)
-            self.last_action = action
-            return action
-
+    def _greedy(self, state: np.ndarray) -> int:
+        """Argmax over Q(s, .), with no exploration."""
         with torch.no_grad():
             t = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
-            action = int(self.q_net(t).argmax(dim=1).item())
-        self.last_action = action
-        return action
+            return int(self.q_net(t).argmax(dim=1).item())
+
+    def select_action(self, state: np.ndarray, *, deterministic: bool = False) -> int:
+        """Epsilon-greedy with temporally correlated exploration.
+
+        Drawing a fresh uniform action every step makes consecutive
+        exploratory actions independent, which cannot produce the sustained
+        runs this environment needs: 20 identical pushes in a row have
+        probability (1/3)^20. An exploratory action is instead held for
+        `explore_repeat` steps.
+
+        `deterministic=True` is always pure greedy.
+        """
+        if deterministic:
+            return self._greedy(state)
+
+        # Continue the current run.
+        if self._explore_steps_left > 0:
+            self._explore_steps_left -= 1
+            return self._explore_action
+
+        if random.random() < self.epsilon:
+            self._explore_action = random.randrange(self.action_dim)
+            self._explore_steps_left = self.explore_repeat - 1
+            return self._explore_action
+
+        return self._greedy(state)
 
     def predict(self, obs: np.ndarray, *, deterministic: bool = True) -> tuple[int, None]:
         return self.select_action(obs, deterministic=deterministic), None
@@ -174,14 +188,19 @@ class DQNAgent:
         next_states_t = self._tensor(next_states)
         terminateds_t = self._tensor(terminateds).unsqueeze(1)
 
+        # Q(s, a) from the online net, for the actions taken -> (B, 1).
         current_q = self.q_net(states_t).gather(1, actions_t)
 
+        # max_a' Q(s', a') from the frozen target net, without gradient.
         with torch.no_grad():
             next_q = self.target_net(next_states_t).max(dim=1, keepdim=True).values
-            target_q = rewards_t + self.gamma * next_q * (1.0 - terminateds_t)
 
+        # Bellman target. (1 - terminated) drops the bootstrap term on real
+        # terminal states; the buffer stores `terminated`, not `truncated`.
+        target_q = rewards_t + self.gamma * next_q * (1.0 - terminateds_t)
+
+        loss = self.loss_fn(current_q, target_q)  # both sides are (B, 1)
         self.optimizer.zero_grad()
-        loss = self.loss_fn(current_q, target_q)
         loss.backward()
         self.optimizer.step()
         return float(loss.item())
@@ -194,9 +213,12 @@ class DQNAgent:
 
         for episode in range(1, total_episodes + 1):
             obs, _ = env.reset()
-            self.last_action = None
             total_reward = 0.0
             done = False
+
+            # Runs must not carry over between episodes.
+            self._explore_action = 0
+            self._explore_steps_left = 0
 
             while not done:
                 action = self.select_action(obs)
@@ -243,6 +265,7 @@ class DQNAgent:
         "buffer_capacity",
         "target_update_freq",
         "hidden",
+        "explore_repeat",
     )
 
     def save(self, path: Path) -> None:
