@@ -189,95 +189,55 @@ of progressive clues, so it is a guided investigation rather than a wall.
 
 ## Results
 
-Evaluation is over **100 greedy episodes** (no exploration) with the final agent of
-each run.
+Evaluation is over 100 greedy episodes (no exploration) with the final agent of each run.
 
 | Agent | Training episodes | Evaluation mean ± std | Best / worst episode | Reached the flag |
 |---|---:|---:|---:|---:|
 | Q-Learning | 20,000 | −132.54 ± 19.21 | −114 / −167 | 100/100 |
-| DQN | 2,500 | **−107.70 ± 14.06** | **−88** / −142 | 100/100 |
+| DQN | 2,500 | −107.70 ± 14.06 | −88 / −142 | 100/100 |
 
 ### Q-Learning
 
 ![Q-Learning result](docs/evidencia/qlearning_resultado.png)
 
-**Comment.** For the first ~2,000 episodes the reward sits at −200: the agent has never
-reached the flag, so there is nothing to propagate. Once it does, that information flows
-backwards through the Q-table and the curve climbs. It then oscillates between −140 and
-−175 for the rest of the run: with only 400 cells, different states share a cell and the
-policy cannot get any finer. In evaluation it reaches the flag in **100/100 episodes**
-with a mean of **−132.54**, short of the −110 threshold.
+**Comment.** The reward sits at −200 for the first ~2,000 episodes, then climbs and
+oscillates between −140 and −175. With only 400 cells, different states share a cell and
+the policy cannot get any finer. In evaluation it reaches the flag in 100/100 episodes
+with a mean of −132.54, short of the −110 threshold.
 
 ### DQN
 
 ![DQN result](docs/evidencia/dqn_resultado.png)
 
 **Comment.** DQN is flat at −195 while exploration dominates, lifts off around episode
-600 once the replay buffer holds successful episodes, and settles near −130. With
-exploration switched off it reaches the flag in **100/100 episodes** with a mean of
-**−107.70**, clearing the −110 threshold with **8 times fewer episodes** than the table.
-
-The training curve stays at −130 while evaluation gives −107.70. The gap is exploration:
-during training the 25-step runs spoil the episode in progress, and evaluation has none.
-
-The advantage over the table comes from not discretising. The network takes position and
-velocity as continuous numbers and generalises between nearby states, while the table
-treats every grid cell separately.
+600, and settles near −130. In evaluation it reaches the flag in 100/100 episodes with a
+mean of −107.70, clearing the −110 threshold with 8 times fewer episodes than the table.
+The advantage comes from not discretising: the network takes position and velocity as
+continuous numbers and generalises between nearby states.
 
 ### Q-Learning vs DQN
 
 | | Q-Learning | DQN |
 |---|---:|---:|
-| Evaluation mean (100 greedy episodes) | −132.54 | **−107.70** |
-| Standard deviation | ±19.21 | **±14.06** |
-| Best / worst evaluation episode | −114 / −167 | **−88 / −142** |
+| Evaluation mean (100 greedy episodes) | −132.54 | −107.70 |
+| Standard deviation | ±19.21 | ±14.06 |
+| Best / worst evaluation episode | −114 / −167 | −88 / −142 |
 | Reached the flag | 100/100 | 100/100 |
-| Reaches the −110 "solved" threshold | No | **Yes** |
-| Training episodes | 20,000 | **2,500** |
-
-DQN needs about 25 fewer steps per episode and clears the threshold that the table does
-not, learning from 8 times fewer episodes. Each DQN episode costs more, though, because
-it runs a gradient step per environment step.
+| Reaches the −110 "solved" threshold | No | Yes |
+| Training episodes | 20,000 | 2,500 |
 
 ## Exercise 3: why DQN would not learn
 
-With 2a and 2b correct, DQN trains without errors and learns nothing: −200.00 for 1,000
-episodes, with no variation. Four measurements located the cause.
+With 2a and 2b correct, DQN reports −200.00 for 1,000 episodes with no variation. The
+same agent trained on `CartPole-v1` went from 21.12 to 284.28, so the learning code was
+not the cause. The cause was the exploration: over 300 episodes of random actions there
+were 0 flag reaches, because escaping the valley takes about 20 consecutive pushes in
+the same direction and drawing a fresh action each step gives that a probability of
+(1/3)^20.
 
-1. **The learning code was fine.** The same agent, unmodified, trained for 200 episodes
-   on `CartPole-v1` went from 21.12 to 284.28. The network, the update and the buffer
-   work, so the failure was specific to MountainCar.
-2. **The agent had never seen the goal.** Over 300 episodes of random actions there were
-   0 flag reaches; all 300 were cut by the 200-step limit. The average maximum position
-   was −0.389 and the best of the 300 was −0.163, with the goal at 0.5.
-3. **The network had learned that nothing it does matters.** Across 200 random states,
-   the mean spread between the three action values was 0.0058, and the mean value was
-   approaching −100, the discounted sum of −1 forever. Given the data it saw, that was
-   correct.
-4. **The required behaviour was unreachable.** Escaping the valley takes about 20
-   consecutive pushes in the same direction. Drawing a fresh action each step from three
-   options gives that a probability of (1/3)^20, so more episodes never help.
-
-The fix is in the data being collected. Drawing each step independently makes
-consecutive actions cancel out, so they have to be made dependent in time: when the
-agent explores, it holds that action for 25 steps. Flag reaches go from 0/300 to 46/300.
-The update rule, the reward and the environment were left untouched.
-
-### Choosing 25 steps
-
-Values 20, 25 and 30 were trained 3 independent times each, with 100 evaluation
-episodes per run:
-
-| Steps | Mean of the 3 runs | Std across runs |
-|---|---:|---:|
-| 20 | −113.61 | 13.79 |
-| 25 | −103.69 | 4.06 |
-| 30 | −104.58 | 2.41 |
-
-All nine runs solved the environment 100/100. Values 25 and 30 are indistinguishable,
-while 20 reaches similar means but is far less stable: one of its three runs dropped to
-−132.65. 25 was adopted for its stability. The figures above come from the run that is
-being delivered, which is why its mean differs from the sweep average.
+The fix makes consecutive exploratory actions dependent in time: when the agent explores,
+it holds that action for 25 steps. Flag reaches go from 0/300 to 46/300. The update rule,
+the reward and the environment were left untouched.
 
 ## Project layout
 
